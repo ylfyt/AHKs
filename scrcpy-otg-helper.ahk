@@ -3,28 +3,27 @@
 
 DetectHiddenWindows true
 
-Scrcpy := "scr_v510_otg ahk_class SDL_app"
-ScrcpyHwnd := 0
-ScrcpyStarting := false
-ScrcpyVisible := false
-LastSelectedDevice := ""
+scrcpyWindowCode := "scr_v510_otg ahk_class SDL_app"
+scrcpyHwnd := 0
+isScrcpyStarted := false
+isScrcpyVisible := false
+lastSelectedDevice := ""
 
 ; Register Windows foreground event hook
-HookProc := CallbackCreate(ForegroundChanged, "F", 7)
-
-HookHandle := DllCall(
+hookProc := CallbackCreate(ForegroundChanged, "F", 7)
+hookHandle := DllCall(
     "SetWinEventHook",
     "UInt", 0x0003,  ; EVENT_SYSTEM_FOREGROUND
     "UInt", 0x0003,
     "Ptr", 0,
-    "Ptr", HookProc,
+    "Ptr", hookProc,
     "UInt", 0,
     "UInt", 0,
     "UInt", 0,
     "Ptr"
 )
 
-if !HookHandle {
+if !hookHandle {
     MsgBox "Cannot register Windows event hook.", "Scrcpy error"
     ExitApp
 }
@@ -35,129 +34,119 @@ OnExit Cleanup
 {
     StartScrcpy(false)
 }
- 
+
 ^!+o::  ; Ctrl+Alt+O
 {
     StartScrcpy(true)
 }
 
-StartScrcpy(withAudio)
-{
-    global Scrcpy, ScrcpyHwnd, ScrcpyStarting, ScrcpyVisible, LastSelectedDevice
+StartScrcpy(withAudio) {
+    global scrcpyWindowCode, scrcpyHwnd, isScrcpyStarted, isScrcpyVisible, lastSelectedDevice
 
     ; Check if scrcpy already exists
-    if WinExist(Scrcpy) {
-        ScrcpyHwnd := WinExist(Scrcpy)
+    if WinExist(scrcpyWindowCode) {
+        scrcpyHwnd := WinExist(scrcpyWindowCode)
 
         ; If visible and active, hide it
-        if ScrcpyVisible && WinActive("ahk_id " ScrcpyHwnd) {
-            WinHide("ahk_id " ScrcpyHwnd)
-            ScrcpyVisible := false
+        if isScrcpyVisible && WinActive("ahk_id " scrcpyHwnd) {
+            WinHide("ahk_id " scrcpyHwnd)
+            isScrcpyVisible := false
         }
         ; Otherwise show and activate
         else {
-            ScrcpyVisible := true
-            WinShow("ahk_id " ScrcpyHwnd)
-            WinActivate("ahk_id " ScrcpyHwnd)
-            ControlClick "x1 y1", "ahk_id " ScrcpyHwnd
+            isScrcpyVisible := true
+            WinShow("ahk_id " scrcpyHwnd)
+            WinActivate("ahk_id " scrcpyHwnd)
+            ControlClick "x1 y1", "ahk_id " scrcpyHwnd
         }
         return
     }
 
-    ScrcpyVisible := false
+    isScrcpyVisible := false
 
     ; Start adb server
     Run("adb start-server", , "Hide")
-    NewPID := ProcessWait("adb.exe", 15)
+    newPID := ProcessWait("adb.exe", 15)
 
-    if not NewPID {
+    if not newPID {
         MsgBox "Cannot start adb server.", "Scrcpy error"
         return
     }
 
     ; Select Android device
-    Device := SelectAdbDevice()
+    device := SelectAdbDevice()
 
-    if !Device
+    if !device
         return
-		
-	LastSelectedDevice := Device
+
+    lastSelectedDevice := device
 
     ; Start scrcpy
-    SetWorkingDir "C:\Users\YA\scrcpy"
+    isScrcpyStarted := true
+    audioArg := withAudio ? "" : " --no-audio"
 
-    ScrcpyStarting := true
+    Run 'C:\Users\YA\scrcpy\scrcpy-noconsole.vbs --serial="' device '"' audioArg ' --no-video --keyboard=uhid --mouse=uhid --gamepad=uhid --window-title=scr_v510_otg'
 
-    AudioArg := withAudio ? "" : " --no-audio"
-
-    Run 'scrcpy-noconsole.vbs --serial="' Device '"' AudioArg ' --no-video --keyboard=uhid --mouse=uhid --gamepad=uhid --window-title=scr_v510_otg'
-
-    if WinWait(Scrcpy, , 10) {
+    if WinWait(scrcpyWindowCode, , 10) {
         try {
-            ScrcpyHwnd := WinExist(Scrcpy)
-            ScrcpyVisible := true
+            scrcpyHwnd := WinExist(scrcpyWindowCode)
+            isScrcpyVisible := true
 
-            WinShow("ahk_id " ScrcpyHwnd)
-            WinActivate("ahk_id " ScrcpyHwnd)
-            ControlClick "x1 y1", "ahk_id " ScrcpyHwnd
+            WinShow("ahk_id " scrcpyHwnd)
+            WinActivate("ahk_id " scrcpyHwnd)
+            ControlClick "x1 y1", "ahk_id " scrcpyHwnd
         }
         catch Error as e {
             MsgBox "Scrcpy start failed!", "Scrcpy error"
         }
 
-        ScrcpyStarting := false
+        isScrcpyStarted := false
         return
     }
 
-    ScrcpyStarting := false
+    isScrcpyStarted := false
     MsgBox "Scrcpy start timeout", "Scrcpy error"
 }
 
-
 ; Windows foreground event callback
-ForegroundChanged(hHook, event, hwnd, idObject, idChild, eventThread, eventTime)
-{
-    global ScrcpyHwnd, ScrcpyStarting, ScrcpyVisible
+ForegroundChanged(hHook, event, hwnd, idObject, idChild, eventThread, eventTime) {
+    global scrcpyHwnd, isScrcpyStarted, isScrcpyVisible
 
     ; Ignore events while starting or already hidden
-    if ScrcpyStarting || !ScrcpyVisible
+    if isScrcpyStarted || !isScrcpyVisible
         return
 
     ; Ignore if scrcpy is already foreground
-    if hwnd = ScrcpyHwnd
+    if hwnd = scrcpyHwnd
         return
 
     ; Another application became foreground
     try {
-        WinHide("ahk_id " ScrcpyHwnd)
-        ScrcpyVisible := false
+        WinHide("ahk_id " scrcpyHwnd)
+        isScrcpyVisible := false
     }
 }
 
-
 ; Cleanup Windows event hook
-Cleanup(*)
-{
-    global HookHandle, HookProc, ScrcpyHwnd, LastSelectedDevice
+Cleanup(*) {
+    global hookHandle, hookProc, scrcpyHwnd, lastSelectedDevice
 
     ; Close scrcpy window
-    if ScrcpyHwnd && WinExist("ahk_id " ScrcpyHwnd)
-        WinClose("ahk_id " ScrcpyHwnd)
+    if scrcpyHwnd && WinExist("ahk_id " scrcpyHwnd)
+        WinClose("ahk_id " scrcpyHwnd)
 
     ; Unregister Windows event hook
-    if HookHandle
-        DllCall("UnhookWinEvent", "Ptr", HookHandle)
+    if hookHandle
+        DllCall("UnhookWinEvent", "Ptr", hookHandle)
 
     ; Free callback
-    if HookProc
-        CallbackFree(HookProc)
+    if hookProc
+        CallbackFree(hookProc)
 }
 
+SelectAdbDevice() {
+    global lastSelectedDevice
 
-SelectAdbDevice()
-{
-	global LastSelectedDevice
-	
     shell := ComObject("WScript.Shell")
     exec := shell.Exec("adb devices")
     output := exec.StdOut.ReadAll()
@@ -165,8 +154,7 @@ SelectAdbDevice()
     devices := []
 
     ; Parse connected devices
-    Loop Parse output, "`n", "`r"
-    {
+    loop parse output, "`n", "`r" {
         if RegExMatch(A_LoopField, "^\s*(\S+)\s+device\s*$", &m)
             devices.Push(m[1])
     }
@@ -198,9 +186,9 @@ SelectAdbDevice()
             device
         )
         radios.Push(radio)
-		
-		if (device = LastSelectedDevice)
-			radio.Value := 1
+
+        if (device = lastSelectedDevice)
+            radio.Value := 1
     }
 
     connectBtn := dlg.AddButton("Default xm y+20 w100", "Connect")
@@ -210,8 +198,7 @@ SelectAdbDevice()
     cancelBtn.OnEvent("Click", (*) => dlg.Destroy())
     dlg.OnEvent("Close", (*) => dlg.Destroy())
 
-    Submit()
-    {
+    Submit() {
         for i, radio in radios {
             if radio.Value {
                 selected := devices[i]
