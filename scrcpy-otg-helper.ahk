@@ -85,7 +85,11 @@ StartScrcpy(withAudio) {
     isScrcpyStarted := true
     audioArg := withAudio ? "" : " --no-audio"
 
-    Run 'C:\Users\YA\scrcpy\scrcpy-noconsole.vbs --serial="' device '"' audioArg ' --no-video --keyboard=uhid --mouse=uhid --gamepad=uhid --window-title=scr_v510_otg'
+    Run(
+		'scrcpy-noconsole.vbs --serial="' device '"' audioArg ' --no-video --keyboard=uhid --mouse=uhid --gamepad=uhid --window-title=scr_v510_otg',
+		"C:\Users\YA\scrcpy",
+		"Hide"
+	)
 
     if WinWait(scrcpyWindowCode, , 10) {
         try {
@@ -215,3 +219,28 @@ SelectAdbDevice() {
 
     return selected
 }
+
+CloseScrcpy() {
+    global scrcpyHwnd, isScrcpyVisible, isScrcpyStarted
+
+    if scrcpyHwnd && WinExist("ahk_id " scrcpyHwnd) {
+        WinClose("ahk_id " scrcpyHwnd)
+    }
+
+    scrcpyHwnd := 0
+    isScrcpyVisible := false
+    isScrcpyStarted := false
+}
+
+
+; =========================
+; Tray Menu
+; =========================
+A_TrayMenu.Add()
+
+A_TrayMenu.Add("Scrcpy with audio", (*) => StartScrcpy(true))
+A_TrayMenu.Add("Scrcpy without audio", (*) => StartScrcpy(false))
+
+A_TrayMenu.Add()
+
+A_TrayMenu.Add("Close scrcpy", (*) => CloseScrcpy())
